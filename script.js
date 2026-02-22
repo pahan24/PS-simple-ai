@@ -9,6 +9,54 @@ let dbReady = false;
 let pendingAttachments = []; // { file, type: 'image'|'document', dataUrl? }
 let isProcessing = false;
 
+// Conversation list management
+function getConversations() {
+    try {
+        return JSON.parse(localStorage.getItem("chat_conversations") || "[]");
+    } catch (e) {
+        return [];
+    }
+}
+
+function saveConversations(convs) {
+    localStorage.setItem("chat_conversations", JSON.stringify(convs));
+}
+
+function updateCurrentConversation(title) {
+    var convs = getConversations();
+    var existing = convs.findIndex(function(c) { return c.id === sessionId; });
+    if (existing !== -1) {
+        convs[existing].updatedAt = Date.now();
+    } else {
+        convs.push({ id: sessionId, title: title || "New Chat", updatedAt: Date.now() });
+    }
+    saveConversations(convs);
+    renderConversationList();
+}
+
+function renderConversationList() {
+    var conversationList = document.getElementById("conversationList");
+    if (!conversationList) return;
+    conversationList.innerHTML = "";
+    var convs = getConversations();
+    convs.sort(function(a, b) { return b.updatedAt - a.updatedAt; });
+    convs.forEach(function(conv) {
+        var item = document.createElement("div");
+        item.className = "conv-item" + (conv.id === sessionId ? " active" : "");
+        item.textContent = conv.title || "New Chat";
+        item.addEventListener("click", function() {
+            sessionId = conv.id;
+            localStorage.setItem("chat_session_id", sessionId);
+            loadHistory();
+            renderConversationList();
+            if (window.innerWidth <= 768) {
+                sidebar.classList.remove("visible");
+            }
+        });
+        conversationList.appendChild(item);
+    });
+}
+
 // DOM references
 const chatBox = document.getElementById("chatBox");
 const welcomeScreen = document.getElementById("welcomeScreen");
@@ -234,8 +282,8 @@ docBtn.addEventListener("click", function() {
 imageInput.addEventListener("change", function(e) {
     var files = Array.from(e.target.files);
     files.forEach(function(file) {
-        if (file.size > 10 * 1024 * 1024) {
-            alert("Image " + file.name + " is too large (max 10MB).");
+        if (file.size > 4.5 * 1024 * 1024) {
+            alert("Image " + file.name + " is too large (max 4.5MB).");
             return;
         }
         var reader = new FileReader();
@@ -257,8 +305,8 @@ imageInput.addEventListener("change", function(e) {
 docInput.addEventListener("change", function(e) {
     var files = Array.from(e.target.files);
     files.forEach(function(file) {
-        if (file.size > 10 * 1024 * 1024) {
-            alert("Document " + file.name + " is too large (max 10MB).");
+        if (file.size > 4.5 * 1024 * 1024) {
+            alert("Document " + file.name + " is too large (max 4.5MB).");
             return;
         }
         var reader = new FileReader();
@@ -338,6 +386,10 @@ async function sendMessage() {
 
     isProcessing = true;
     hideWelcomeScreen();
+
+    // Track this conversation in the sidebar
+    var convTitle = userText ? userText.substring(0, 40) : "Image/Document";
+    updateCurrentConversation(convTitle);
 
     // Build attachment info for display
     var displayAttachments = attachments.map(function(att) {
@@ -440,32 +492,49 @@ newChatBtn.addEventListener("click", function() {
     userInput.value = "";
     userInput.style.height = "auto";
     updateSendButton();
+    renderConversationList();
 });
 
 // Clear all chats
 clearAllBtn.addEventListener("click", async function() {
     if (!confirm("Are you sure you want to clear all chat history?")) return;
 
-    try {
-        await fetch("/api/history?session_id=" + encodeURIComponent(sessionId), {
-            method: "DELETE"
-        });
-    } catch (e) {
-        console.error("Failed to clear history:", e);
+    // Delete history for all stored sessions
+    var convs = getConversations();
+    for (var i = 0; i < convs.length; i++) {
+        try {
+            await fetch("/api/history?session_id=" + encodeURIComponent(convs[i].id), {
+                method: "DELETE"
+            });
+        } catch (e) {
+            console.error("Failed to clear history for session:", e);
+        }
     }
 
+    saveConversations([]);
     sessionId = crypto.randomUUID();
     localStorage.setItem("chat_session_id", sessionId);
     var rows = chatBox.querySelectorAll(".message-row");
     rows.forEach(function(r) { r.remove(); });
     showWelcomeScreen();
+    renderConversationList();
 });
 
 // Sidebar toggle
 sidebarToggle.addEventListener("click", function() {
-    sidebar.classList.toggle("hidden");
     if (window.innerWidth <= 768) {
         sidebar.classList.toggle("visible");
+    } else {
+        sidebar.classList.toggle("hidden");
+    }
+});
+
+// Close sidebar when clicking outside on mobile
+document.addEventListener("click", function(e) {
+    if (window.innerWidth <= 768 && sidebar.classList.contains("visible")) {
+        if (!sidebar.contains(e.target) && e.target !== sidebarToggle && !sidebarToggle.contains(e.target)) {
+            sidebar.classList.remove("visible");
+        }
     }
 });
 
@@ -483,8 +552,8 @@ mainArea.addEventListener("drop", function(e) {
 
     var files = Array.from(e.dataTransfer.files);
     files.forEach(function(file) {
-        if (file.size > 10 * 1024 * 1024) {
-            alert(file.name + " is too large (max 10MB).");
+        if (file.size > 4.5 * 1024 * 1024) {
+            alert(file.name + " is too large (max 4.5MB).");
             return;
         }
 
@@ -517,4 +586,5 @@ mainArea.addEventListener("drop", function(e) {
 // Initialize
 initDatabase().then(function() {
     loadHistory();
+    renderConversationList();
 });

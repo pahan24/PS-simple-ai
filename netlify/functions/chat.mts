@@ -133,16 +133,13 @@ export default async (req: Request, context: Context) => {
         .join("");
       fullText += docTexts;
       messages.push({ role: "user", content: fullText });
-    } else if (conversationHistory.length === 0) {
-      // No history and no attachments, just add the message
+    } else {
+      // Plain text message (no attachments)
       messages.push({ role: "user", content: message });
     }
 
-    // Choose model based on whether images are present
-    const model = hasImages ? "gpt-4o-mini" : "gpt-4o-mini";
-
     const completion = await openai.chat.completions.create({
-      model,
+      model: "gpt-4o-mini",
       messages,
       max_tokens: 2048,
     });
