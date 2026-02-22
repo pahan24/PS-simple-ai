@@ -1,41 +1,52 @@
-const API_KEY = "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";
-
 async function sendMessage() {
     const input = document.getElementById("userInput");
-    const chatBox = document.getElementById("chatBox");
-    const userText = input.value;
+    const userText = input.value.trim();
 
     if (!userText) return;
 
     addMessage(userText, "user");
     input.value = "";
 
-    const response = await fetch("https://api.openai.com/v1/chat/completions", {
-        method: "POST",
-        headers: {
-            "Content-Type": "application/json",
-            "Authorization": "Bearer " + API_KEY
-        },
-        body: JSON.stringify({
-            model: "gpt-4o-mini",
-            messages: [
-                { role: "system", content: "You are a helpful AI assistant." },
-                { role: "user", content: userText }
-            ]
-        })
-    });
+    const sendBtn = document.querySelector("button");
+    sendBtn.disabled = true;
+    const loadingMsg = addMessage("Thinking...", "bot loading");
 
-    const data = await response.json();
-    const botReply = data.choices[0].message.content;
+    try {
+        const response = await fetch("/api/chat", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ message: userText })
+        });
 
-    addMessage(botReply, "bot");
+        const data = await response.json();
+
+        loadingMsg.remove();
+
+        if (!response.ok) {
+            addMessage("Sorry, something went wrong. Please try again.", "bot");
+            return;
+        }
+
+        addMessage(data.reply, "bot");
+    } catch (error) {
+        loadingMsg.remove();
+        addMessage("Could not reach the server. Please try again later.", "bot");
+    } finally {
+        sendBtn.disabled = false;
+        input.focus();
+    }
 }
 
-function addMessage(text, sender) {
+function addMessage(text, className) {
     const chatBox = document.getElementById("chatBox");
     const message = document.createElement("div");
-    message.classList.add("message", sender);
+    message.className = "message " + className;
     message.innerText = text;
     chatBox.appendChild(message);
     chatBox.scrollTop = chatBox.scrollHeight;
+    return message;
 }
+
+document.getElementById("userInput").addEventListener("keydown", function (e) {
+    if (e.key === "Enter") sendMessage();
+});
