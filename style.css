@@ -50,6 +50,16 @@ body {
     color: white;
 }
 
+.loading {
+    opacity: 0.6;
+    font-style: italic;
+}
+
+button:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+}
+
 .input-area {
     display: flex;
     padding: 10px;
